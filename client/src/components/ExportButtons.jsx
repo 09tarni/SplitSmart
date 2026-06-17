@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 export default function ExportButtons({ groupId }) {
   const [loading, setLoading] = useState(null);
 
@@ -10,7 +12,7 @@ export default function ExportButtons({ groupId }) {
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(
-        `http://localhost:5000/api/groups/${groupId}/report?format=${format}`,
+        `${BASE_URL}/api/groups/${groupId}/report?format=${format}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -38,7 +40,8 @@ export default function ExportButtons({ groupId }) {
       <button
         onClick={() => download('pdf')}
         disabled={loading !== null}
-        className="flex items-center gap-2 border border-purple-600 text-purple-600 px-3 py-2 rounded-xl text-xs font-medium hover:bg-purple-50 transition-colors disabled:opacity-50"
+        className="flex items-center gap-2 border px-3 py-2 rounded-xl text-xs font-medium transition-colors disabled:opacity-50"
+        style={{ borderColor: '#009B4D', color: '#009B4D' }}
       >
         <Download size={14} />
         {loading === 'pdf' ? 'Generating...' : 'PDF'}
