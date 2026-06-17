@@ -1,0 +1,13 @@
+This is a full-stack expense splitting app (like Splitwise).
+
+Backend: Node.js, Express.js, PostgreSQL (using the `pg` library with a connection pool)
+Frontend: React, Tailwind CSS
+Auth: JWT tokens stored in localStorage, bcryptjs for password hashing
+DB: All queries use raw SQL via pool.query(), no ORM
+
+Conventions:
+- Controllers in server/controllers/, routes in server/routes/
+- Always use async/await with try/catch
+- Always return { success, data, message } shaped responses
+- Validate required fields before DB queries
+- Never expose passwords in API responses

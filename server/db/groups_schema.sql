@@ -1,0 +1,34 @@
+CREATE TABLE IF NOT EXISTS groups (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  description VARCHAR(255),
+  created_by INT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS group_members (
+  id SERIAL PRIMARY KEY,
+  group_id INT NOT NULL REFERENCES groups (id) ON DELETE CASCADE,
+  user_id INT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  joined_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE (group_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS expenses (
+  id SERIAL PRIMARY KEY,
+  group_id INT NOT NULL REFERENCES groups (id) ON DELETE CASCADE,
+  paid_by INT NOT NULL REFERENCES users (id),
+  title VARCHAR(150) NOT NULL,
+  amount DECIMAL(10, 2) NOT NULL,
+  split_type VARCHAR(20) NOT NULL,
+  category VARCHAR(50) DEFAULT 'general',
+  date DATE DEFAULT CURRENT_DATE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS expense_splits (
+  id SERIAL PRIMARY KEY,
+  expense_id INT NOT NULL REFERENCES expenses (id) ON DELETE CASCADE,
+  user_id INT NOT NULL REFERENCES users (id),
+  owed_amount DECIMAL(10, 2) NOT NULL
+);
