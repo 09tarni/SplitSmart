@@ -1,8 +1,10 @@
 import axios from 'axios';
 
+const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
-  withCredentials: true, // send cookies with every request
+  baseURL: `${BASE_URL}/api`,
+  withCredentials: true,
 });
 
 // Attach access token to every request
@@ -38,7 +40,6 @@ api.interceptors.response.use(
 
     if (isExpired) {
       if (isRefreshing) {
-        // Queue requests while refreshing
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         })
@@ -54,7 +55,7 @@ api.interceptors.response.use(
 
       try {
         const { data } = await axios.post(
-          'http://localhost:5000/api/auth/refresh',
+          `${BASE_URL}/api/auth/refresh`,
           {},
           { withCredentials: true }
         );
@@ -66,7 +67,6 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        // Refresh failed — log user out
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.href = '/login';

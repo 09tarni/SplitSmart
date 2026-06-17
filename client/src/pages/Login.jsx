@@ -4,6 +4,8 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import Logo from '../components/Logo';
 
+const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 const GOOGLE_SVG = (
   <svg width="18" height="18" viewBox="0 0 18 18">
     <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
@@ -26,7 +28,7 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault(); setLoading(true);
     try {
-      const { data } = await axios.post('http://localhost:5000/api/auth/login', form, { headers: { 'Content-Type': 'application/json' }, withCredentials: true });
+      const { data } = await axios.post(`${BASE_URL}/api/auth/login`, form, { headers: { 'Content-Type': 'application/json' }, withCredentials: true });
       localStorage.setItem('token', data.token); localStorage.setItem('user', JSON.stringify(data.user));
       navigate('/dashboard');
     } catch (err) { toast.error(err.response?.data?.message || 'Login failed'); }
@@ -35,11 +37,10 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex" style={{ background: '#F5F0E8' }}>
-      {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 text-white" style={{ background: 'linear-gradient(145deg, #009B4D 0%, #007A3D 50%, #005C2E 100%)' }}>
-      <div className="flex items-center mb-6">
-        <Logo size={48} dark={true} />
-      </div>
+        <div className="flex items-center mb-6">
+          <Logo size={48} dark={true} />
+        </div>
         <div>
           <h2 className="text-4xl font-bold leading-tight mb-4">Split smarter,<br />settle faster.</h2>
           <p className="text-green-100 text-base mb-10">Track group expenses and settle debts with one click.</p>
@@ -57,16 +58,15 @@ export default function Login() {
         <p className="text-green-200 text-xs">© 2026 SplitSmart</p>
       </div>
 
-      {/* Right panel */}
       <div className="w-full lg:w-1/2 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-md">
-        <div className="mb-10 lg:hidden">
-  <Logo size={34} />
-</div>
+          <div className="mb-10 lg:hidden">
+            <Logo size={34} />
+          </div>
           <h1 className="text-3xl font-bold mb-1" style={{ color: '#1a1a1a' }}>Welcome back</h1>
           <p className="text-sm mb-8" style={{ color: '#6b7280' }}>Sign in to your account</p>
 
-          <button onClick={() => { window.location.href = 'http://localhost:5000/api/auth/google'; }}
+          <button onClick={() => { window.location.href = `${BASE_URL}/api/auth/google`; }}
             className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 rounded-xl py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors mb-5 shadow-sm">
             {GOOGLE_SVG} Continue with Google
           </button>
