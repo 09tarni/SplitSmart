@@ -15,6 +15,10 @@ const logger = require('./logger');
 const app = express();
 const server = http.createServer(app);
 
+// Trust the first proxy (Render/Vercel sit behind a reverse proxy).
+// Without this, express-rate-limit sees every request as the same IP.
+app.set('trust proxy', 1);
+
 const io = new Server(server, {
   cors: { origin: process.env.CLIENT_URL || 'http://localhost:3000', methods: ['GET', 'POST'] },
 });
@@ -29,14 +33,16 @@ app.use(cookieParser());
 app.use(passport.initialize());
 
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, max: 200,
+  windowMs: 15 * 60 * 1000, max: 300,
   message: { success: false, message: 'Too many requests, please try again later.' },
   standardHeaders: true, legacyHeaders: false,
 });
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, max: 20,
+  windowMs: 15 * 60 * 1000, max: 50,
   message: { success: false, message: 'Too many auth attempts, please try again in 15 minutes.' },
   standardHeaders: true, legacyHeaders: false,
+  // Don't rate-limit the OAuth redirect/callback round-trips
+  skip: (req) => req.path.startsWith('/google'),
 });
 
 app.use(globalLimiter);
