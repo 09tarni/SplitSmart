@@ -28,7 +28,7 @@ export default function Dashboard() {
   const [form, setForm] = useState({ name: '', description: '' });
   const [creating, setCreating] = useState(false);
 
-  const enrichGroups = async (rawGroups) => {
+  const enrichGroups = useCallback(async (rawGroups) => {
     const enriched = await Promise.all(rawGroups.map(async (group) => {
       try {
         const [detailRes, expensesRes, balancesRes] = await Promise.all([
@@ -49,7 +49,7 @@ export default function Dashboard() {
     setTotalBalance(enriched.reduce((sum, g) => sum + g.myBalance, 0));
     setTotalSpend(enriched.reduce((sum, g) => sum + g.totalSpend, 0));
     return enriched;
-  };
+  }, [user.id]);
 
   const fetchGroups = useCallback(async () => {
     setLoading(true);
@@ -59,7 +59,7 @@ export default function Dashboard() {
       setGroups(enriched);
     } catch { toast.error('Failed to load groups'); }
     finally { setLoading(false); }
-  }, [user.id]);
+  }, [enrichGroups]);
 
   useEffect(() => { fetchGroups(); }, [fetchGroups]);
 
