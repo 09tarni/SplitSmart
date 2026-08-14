@@ -20,6 +20,17 @@ const verifyTransporter = async () => {
   }
 };
 
+const sendMailWithTimeout = (transporter, mailOptions, timeoutMs = 10000) => {
+  return Promise.race([
+    transporter.sendMail(mailOptions),
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`SMTP request timed out after ${timeoutMs / 1000} seconds`));
+      }, timeoutMs);
+    }),
+  ]);
+};
+
 // Alternative: Using a generic SMTP service
 // const transporter = nodemailer.createTransport({
 //   host: process.env.SMTP_HOST,
@@ -103,7 +114,16 @@ const sendInviteEmail = async (recipientEmail, groupName, inviterName, inviteLin
     };
 
     console.log('[EMAIL] Calling SMTP sendMail...');
-    const info = await transporter.sendMail(mailOptions);
+    let info;
+    try {
+      info = await sendMailWithTimeout(transporter, mailOptions, 10000);
+    } catch (timeoutErr) {
+      if (timeoutErr.message.includes('timed out')) {
+        console.log('[EMAIL] SMTP TIMEOUT');
+        throw new Error(`SMTP timeout: ${timeoutErr.message}`);
+      }
+      throw timeoutErr;
+    }
     console.log('[EMAIL] SMTP sendMail completed');
     if (!info || !info.messageId) {
       throw new Error('SMTP sendMail did not return a messageId.');

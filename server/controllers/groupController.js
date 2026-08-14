@@ -156,6 +156,7 @@ const addMember = async (req, res) => {
           console.log(`[EMAIL] Invite email FAILED to: ${emailLower}`);
           logger.error(`Email delivery failed for ${emailLower}`, { error: emailErr.message });
         }
+        // Note: Even if email fails, existing pending invite already exists in DB
 
         return res.json({
           success: true,
@@ -179,7 +180,7 @@ const addMember = async (req, res) => {
       const frontendUrl = process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000';
       const inviteLink = `${frontendUrl}/register?invite=${inviteToken}`;
 
-      // Send email and wait for it to complete
+      // Send email and wait for it to complete (with timeout safeguard)
       try {
         console.log(`[EMAIL] Starting invite email to: ${emailLower}`);
         await sendInviteEmail(emailLower, groupName, req.user.name, inviteLink);
@@ -190,7 +191,7 @@ const addMember = async (req, res) => {
         logger.error(`Email delivery failed for ${emailLower}`, { error: emailErr.message });
       }
 
-      // Return success once pending invite is created (email delivery is best-effort)
+      // Return success once pending invite is created in DB (email delivery is best-effort with timeout)
       logger.info(`Pending invite created for ${emailLower} to group ${groupId}`);
       return res.json({
         success: true,
