@@ -144,24 +144,26 @@ const addMember = async (req, res) => {
       );
 
       if (existingInvite.rows.length > 0 && existingInvite.rows[0].status === 'pending') {
-        const resendInvite = await sendInviteEmail(emailLower, groupName, req.user.name, `${process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000'}/register?invite=${existingInvite.rows[0].invite_token || inviteToken}`);
-
-        if (!resendInvite.success) {
-          return res.status(409).json({
-            success: false,
-            message: `Invitation already exists for ${emailLower}, but email delivery failed. Please try again later.`,
+        // Resend to existing pending invite (async, don't wait)
+        const frontendUrl = process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000';
+        const inviteLink = `${frontendUrl}/register?invite=${existingInvite.rows[0].invite_token}`;
+        
+        // Send email asynchronously in background
+        setImmediate(() => {
+          sendInviteEmail(emailLower, groupName, req.user.name, inviteLink).catch(err => {
+            logger.warn(`Failed to resend invite email to ${emailLower}`, { error: err.message });
           });
-        }
+        });
 
         return res.json({
           success: true,
           message: `Invitation sent to ${emailLower}`,
           isNew: false,
           inviteStatus: 'pending',
-          emailSent: true,
         });
       }
 
+      // Create pending invite in database
       await pool.query(
         `INSERT INTO pending_invites (group_id, email, invited_by, invite_token, status)
          VALUES ($1, $2, $3, $4, 'pending')
@@ -175,22 +177,20 @@ const addMember = async (req, res) => {
       const frontendUrl = process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000';
       const inviteLink = `${frontendUrl}/register?invite=${inviteToken}`;
 
-      const emailResult = await sendInviteEmail(emailLower, groupName, req.user.name, inviteLink);
-      if (!emailResult.success) {
-        logger.warn(`Failed to send invite email to ${emailLower} for group ${groupId}`, { error: emailResult.error });
-        return res.status(502).json({
-          success: false,
-          message: 'Invitation could not be sent. Please try again later.',
+      // Send email asynchronously in background (don't wait for it)
+      setImmediate(() => {
+        sendInviteEmail(emailLower, groupName, req.user.name, inviteLink).catch(err => {
+          logger.warn(`Failed to send invite email to ${emailLower} for group ${groupId}`, { error: err.message });
         });
-      }
+      });
 
-      logger.info(`Invite email sent to ${emailLower} for group ${groupId}`);
+      // Return success immediately once pending invite is created
+      logger.info(`Pending invite created for ${emailLower} to group ${groupId}`);
       return res.json({
         success: true,
         message: `Invitation sent to ${emailLower}`,
         isNew: true,
         inviteStatus: 'pending',
-        emailSent: true,
       });
     } catch (inviteErr) {
       logger.error('Error creating pending invite', { error: inviteErr.message });

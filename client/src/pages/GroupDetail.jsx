@@ -130,14 +130,19 @@ export default function GroupDetail() {
       return;
     }
 
+    if (submitting) return; // Prevent duplicate submissions
+    setSubmitting(true);
+
     try {
       const { data } = await api.post(`/groups/${id}/members`, { email });
-      toast.success(data.message || 'Member added');
+      toast.success(data.message || 'Invitation sent');
       setShowMemberModal(false);
       setMemberEmail('');
-      fetchAll();
+      // Don't call fetchAll() — socket event 'member_added' will trigger it
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to add member');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -640,8 +645,11 @@ export default function GroupDetail() {
             <form onSubmit={handleAddMember} className="space-y-4">
               <input type="email" placeholder="Enter member's email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} className={`${INPUT} ${RING}`} required />
               <div className="flex gap-3">
-                <button type="button" onClick={() => setShowMemberModal(false)} className="flex-1 py-3 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-                <button type="submit" className="flex-1 py-3 text-white rounded-xl text-sm font-semibold hover:opacity-90" style={{ background: '#009B4D' }}>Add</button>
+                <button type="button" onClick={() => setShowMemberModal(false)} disabled={submitting} className="flex-1 py-3 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
+                <button type="submit" disabled={submitting} className="flex-1 py-3 text-white rounded-xl text-sm font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2" style={{ background: submitting ? '#999' : '#009B4D' }}>
+                  {submitting && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                  {submitting ? 'Sending...' : 'Add'}
+                </button>
               </div>
             </form>
           </div>

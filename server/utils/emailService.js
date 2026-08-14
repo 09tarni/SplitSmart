@@ -37,11 +37,6 @@ const sendInviteEmail = async (recipientEmail, groupName, inviterName, inviteLin
       throw new Error('EMAIL_USER and EMAIL_PASSWORD must be configured.');
     }
 
-    const transporterCheck = await verifyTransporter();
-    if (!transporterCheck.ok) {
-      throw new Error(`SMTP verification failed: ${transporterCheck.error}`);
-    }
-
     const mailOptions = {
       from: process.env.EMAIL_USER || 'noreply@splitsmart.com',
       to: recipientEmail,
