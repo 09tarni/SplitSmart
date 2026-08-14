@@ -22,6 +22,46 @@ const setRefreshCookie = (res, token) => {
   });
 };
 
+// Helper function to process pending invites when user signs up
+const processPendingInvites = async (userId, email) => {
+  try {
+    const invitesResult = await pool.query(
+      `SELECT id, group_id FROM pending_invites 
+       WHERE LOWER(email) = LOWER($1) AND status = 'pending'`,
+      [email]
+    );
+    
+    if (invitesResult.rows.length === 0) return;
+    
+    for (const invite of invitesResult.rows) {
+      // Check if user is already a member
+      const existing = await pool.query(
+        `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`,
+        [invite.group_id, userId]
+      );
+      
+      if (existing.rows.length === 0) {
+        // Add user to the group
+        await pool.query(
+          `INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)`,
+          [invite.group_id, userId]
+        );
+      }
+      
+      // Mark invite as accepted
+      await pool.query(
+        `UPDATE pending_invites SET status = 'accepted', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+        [invite.id]
+      );
+      
+      logger.info(`User ${userId} added to group ${invite.group_id} via pending invite`);
+    }
+  } catch (err) {
+    logger.error('Error processing pending invites', { error: err.message });
+    // Don't fail signup if invite processing fails
+  }
+};
+
 const register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -35,6 +75,10 @@ const register = async (req, res) => {
       [name, email, hashedPassword]
     );
     const user = result.rows[0];
+    
+    // Process any pending invites
+    await processPendingInvites(user.id, email);
+    
     const accessToken = signAccessToken(user);
     const refreshToken = generateRefreshToken();
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);

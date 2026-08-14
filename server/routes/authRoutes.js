@@ -33,12 +33,14 @@ router.get('/google',
 );
 
 router.get('/google/callback',
-  passport.authenticate('google', {
-    session: false,
-    failureRedirect: 'http://localhost:3000/login?error=oauth_failed',
-  }),
+  passport.authenticate('google', { session: false }),
   async (req, res) => {
     try {
+      if (!req.user) {
+        const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+        return res.redirect(`${clientUrl}/login?error=oauth_failed`);
+      }
+
       const user = req.user;
       const accessToken = signAccessToken(user);
       const refreshToken = generateRefreshToken();
@@ -61,15 +63,23 @@ router.get('/google/callback',
         id: user.id, name: user.name, email: user.email,
       }));
 
-      const redirectUrl = `http://localhost:3000/oauth-callback?token=${accessToken}&user=${userParam}`;
+      const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+      const redirectUrl = `${clientUrl}/oauth-callback?token=${accessToken}&user=${userParam}`;
       console.log('Redirecting to:', redirectUrl.substring(0, 100) + '...');
       logger.info(`OAuth redirect for user ${user.email}`);
 
       res.redirect(redirectUrl);
     } catch (err) {
       logger.error('Google callback error', { error: err.message });
-      res.redirect('http://localhost:3000/login?error=oauth_failed');
+      const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+      res.redirect(`${clientUrl}/login?error=oauth_failed`);
     }
+  },
+  // Error handler for failed authentication
+  (err, req, res, next) => {
+    logger.error('Passport authentication error', { error: err.message });
+    const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+    res.redirect(`${clientUrl}/login?error=oauth_failed`);
   }
 );
 

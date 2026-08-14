@@ -55,19 +55,110 @@ const getGroupById = async (req, res) => {
 
 const addMember = async (req, res) => {
   try {
-    const { user_id } = req.body;
+    const { user_id, email } = req.body;
     const groupId = req.params.id;
-    const existing = await pool.query(`SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`, [groupId, user_id]);
-    if (existing.rows.length > 0) return res.status(400).json({ success: false, message: 'User is already a member' });
-    await pool.query(`INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)`, [groupId, user_id]);
-    const userResult = await pool.query(`SELECT name FROM users WHERE id = $1`, [user_id]);
-    const userName = userResult.rows[0]?.name || 'Someone';
-    const io = req.app.get('io');
-    if (io) {
-      io.to(`group:${groupId}`).emit('member_added', { groupId, message: `${userName} joined the group` });
+    
+    // Must provide either user_id or email
+    if (!user_id && !email) {
+      return res.status(400).json({ success: false, message: 'Either user_id or email is required' });
     }
-    logger.info(`Member ${user_id} added to group ${groupId}`);
-    res.json({ success: true, message: 'Member added' });
+
+    if (user_id) {
+      // Adding existing user by ID
+      const existing = await pool.query(
+        `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`,
+        [groupId, user_id]
+      );
+      if (existing.rows.length > 0) {
+        return res.status(400).json({ success: false, message: 'User is already a member' });
+      }
+      
+      await pool.query(
+        `INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)`,
+        [groupId, user_id]
+      );
+      
+      const userResult = await pool.query(`SELECT name FROM users WHERE id = $1`, [user_id]);
+      const userName = userResult.rows[0]?.name || 'Someone';
+      
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`group:${groupId}`).emit('member_added', { 
+          groupId, 
+          message: `${userName} joined the group` 
+        });
+      }
+      
+      logger.info(`Member ${user_id} added to group ${groupId}`);
+      res.json({ success: true, message: 'Member added' });
+    } else {
+      // Adding user by email (may not be signed up yet)
+      const emailLower = email.toLowerCase().trim();
+      
+      // Check if user with this email exists
+      const userResult = await pool.query(
+        `SELECT id FROM users WHERE LOWER(email) = $1`,
+        [emailLower]
+      );
+      
+      if (userResult.rows.length > 0) {
+        // User exists, add them directly
+        const existingUser = userResult.rows[0];
+        const memberCheck = await pool.query(
+          `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2`,
+          [groupId, existingUser.id]
+        );
+        if (memberCheck.rows.length > 0) {
+          return res.status(400).json({ success: false, message: 'User is already a member' });
+        }
+        
+        await pool.query(
+          `INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)`,
+          [groupId, existingUser.id]
+        );
+        
+        const userNameResult = await pool.query(`SELECT name FROM users WHERE id = $1`, [existingUser.id]);
+        const userName = userNameResult.rows[0]?.name || 'Someone';
+        
+        const io = req.app.get('io');
+        if (io) {
+          io.to(`group:${groupId}`).emit('member_added', { 
+            groupId, 
+            message: `${userName} joined the group` 
+          });
+        }
+        
+        logger.info(`Member ${existingUser.id} added to group ${groupId} via email`);
+        res.json({ success: true, message: 'Member added', isNew: false });
+      } else {
+        // User doesn't exist yet, create a pending invite
+        try {
+          await pool.query(
+            `INSERT INTO pending_invites (group_id, email, invited_by, status)
+             VALUES ($1, $2, $3, 'pending')
+             ON CONFLICT (group_id, email) DO UPDATE SET status = 'pending', updated_at = CURRENT_TIMESTAMP`,
+            [groupId, emailLower, req.user.id]
+          );
+          
+          const groupResult = await pool.query(`SELECT name FROM groups WHERE id = $1`, [groupId]);
+          const groupName = groupResult.rows[0]?.name || 'a group';
+          
+          // TODO: Send invite email here
+          // await sendInviteEmail(emailLower, groupName, req.user.name);
+          
+          logger.info(`Pending invite created for ${emailLower} to group ${groupId}`);
+          res.json({ 
+            success: true, 
+            message: 'Invite sent! Member will be added when they sign up.',
+            isNew: true,
+            inviteStatus: 'pending'
+          });
+        } catch (inviteErr) {
+          logger.error('Error creating pending invite', { error: inviteErr.message });
+          res.status(500).json({ success: false, message: 'Failed to create invite' });
+        }
+      }
+    }
   } catch (err) {
     logger.error('addMember error', { error: err.message });
     res.status(500).json({ success: false, message: 'Server error' });

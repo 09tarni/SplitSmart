@@ -4,7 +4,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import Logo from '../components/Logo';
 
-const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 const GOOGLE_SVG = (
   <svg width="18" height="18" viewBox="0 0 18 18">

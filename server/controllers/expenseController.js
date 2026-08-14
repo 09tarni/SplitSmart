@@ -167,6 +167,12 @@ const settleUp = async (req, res) => {
     const { from_user_id, to_user_id, amount } = req.body;
     if (!from_user_id || !to_user_id || amount == null)
       return res.status(400).json({ success: false, message: 'from_user_id, to_user_id, and amount are required' });
+    
+    // Authorization: Only the payer (from_user_id) can settle up
+    if (req.user.id !== from_user_id) {
+      return res.status(403).json({ success: false, message: 'Only the payer can settle up' });
+    }
+    
     const numericAmount = parseFloat(amount);
     if (isNaN(numericAmount) || numericAmount <= 0)
       return res.status(400).json({ success: false, message: 'amount must be a positive number' });
