@@ -2,7 +2,12 @@ import { useState } from 'react';
 import { Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const normalizeApiBase = () => {
+  const raw = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+  return raw.replace(/\/+$/, '').replace(/\/api$/, '');
+};
+
+const BASE_URL = normalizeApiBase();
 
 export default function ExportButtons({ groupId }) {
   const [loading, setLoading] = useState(null);

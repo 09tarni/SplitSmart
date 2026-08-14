@@ -1,6 +1,11 @@
 import { io } from 'socket.io-client';
 
-const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const normalizeApiBase = () => {
+  const raw = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+  return raw.replace(/\/+$/, '').replace(/\/api$/, '');
+};
+
+const BASE_URL = normalizeApiBase();
 
 const socket = io(BASE_URL, {
   autoConnect: false,

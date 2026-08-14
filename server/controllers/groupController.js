@@ -144,6 +144,15 @@ const addMember = async (req, res) => {
       );
 
       if (existingInvite.rows.length > 0 && existingInvite.rows[0].status === 'pending') {
+        const resendInvite = await sendInviteEmail(emailLower, groupName, req.user.name, `${process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000'}/register?invite=${existingInvite.rows[0].invite_token || inviteToken}`);
+
+        if (!resendInvite.success) {
+          return res.status(409).json({
+            success: false,
+            message: `Invitation already exists for ${emailLower}, but email delivery failed. Please try again later.`,
+          });
+        }
+
         return res.json({
           success: true,
           message: `Invitation sent to ${emailLower}`,

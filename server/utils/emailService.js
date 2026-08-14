@@ -10,6 +10,16 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+const verifyTransporter = async () => {
+  try {
+    await transporter.verify();
+    return { ok: true };
+  } catch (err) {
+    logger.error('SMTP verification failed', { error: err.message });
+    return { ok: false, error: err.message };
+  }
+};
+
 // Alternative: Using a generic SMTP service
 // const transporter = nodemailer.createTransport({
 //   host: process.env.SMTP_HOST,
@@ -25,6 +35,11 @@ const sendInviteEmail = async (recipientEmail, groupName, inviterName, inviteLin
   try {
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
       throw new Error('EMAIL_USER and EMAIL_PASSWORD must be configured.');
+    }
+
+    const transporterCheck = await verifyTransporter();
+    if (!transporterCheck.ok) {
+      throw new Error(`SMTP verification failed: ${transporterCheck.error}`);
     }
 
     const mailOptions = {
@@ -93,16 +108,20 @@ const sendInviteEmail = async (recipientEmail, groupName, inviterName, inviteLin
     };
 
     const info = await transporter.sendMail(mailOptions);
+    if (!info || !info.messageId) {
+      throw new Error('SMTP sendMail did not return a messageId.');
+    }
+
     logger.info(`Invite email sent to ${recipientEmail}`, { messageId: info.messageId });
     return { success: true, messageId: info.messageId };
   } catch (err) {
-    logger.error('Failed to send invite email', { 
-      error: err.message, 
-      to: recipientEmail 
+    logger.error('Failed to send invite email', {
+      error: err.message,
+      to: recipientEmail,
     });
-    return { 
-      success: false, 
-      error: err.message 
+    return {
+      success: false,
+      error: err.message,
     };
   }
 };
