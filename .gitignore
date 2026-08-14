@@ -17,3 +17,5 @@ client/build/
 # OS
 .DS_Store
 Thumbs.db
+# Kubernetes secrets - never commit real values
+k8s/secret.yaml
