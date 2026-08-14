@@ -102,7 +102,9 @@ const sendInviteEmail = async (recipientEmail, groupName, inviterName, inviteLin
       `,
     };
 
+    console.log('[EMAIL] Calling SMTP sendMail...');
     const info = await transporter.sendMail(mailOptions);
+    console.log('[EMAIL] SMTP sendMail completed');
     if (!info || !info.messageId) {
       throw new Error('SMTP sendMail did not return a messageId.');
     }
@@ -110,6 +112,7 @@ const sendInviteEmail = async (recipientEmail, groupName, inviterName, inviteLin
     logger.info(`Invite email sent to ${recipientEmail}`, { messageId: info.messageId });
     return { success: true, messageId: info.messageId };
   } catch (err) {
+    console.log(`[EMAIL] SMTP error: ${err.message}`);
     logger.error('Failed to send invite email', {
       error: err.message,
       to: recipientEmail,
