@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS pending_invites (
   group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   email VARCHAR(255) NOT NULL,
   invited_by INTEGER NOT NULL REFERENCES users(id),
+  invite_token VARCHAR(255) UNIQUE,
   status VARCHAR(50) DEFAULT 'pending', -- pending, accepted, rejected
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -12,3 +13,7 @@ CREATE TABLE IF NOT EXISTS pending_invites (
 
 CREATE INDEX idx_pending_invites_email ON pending_invites(email);
 CREATE INDEX idx_pending_invites_group_id ON pending_invites(group_id);
+CREATE INDEX idx_pending_invites_token ON pending_invites(invite_token);
+
+-- Add invite_token column if it doesn't exist
+ALTER TABLE pending_invites ADD COLUMN IF NOT EXISTS invite_token VARCHAR(255) UNIQUE;

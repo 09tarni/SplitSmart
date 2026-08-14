@@ -64,21 +64,70 @@ const processPendingInvites = async (userId, email) => {
 
 const register = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    const { name, email, password, inviteToken } = req.body;
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+
+    if (inviteToken) {
+      const inviteResult = await pool.query(
+        `SELECT id, group_id, email FROM pending_invites 
+         WHERE invite_token = $1 AND status = 'pending'`,
+        [inviteToken]
+      );
+
+      if (inviteResult.rows.length === 0) {
+        return res.status(400).json({ success: false, message: 'This invitation is invalid or has expired.' });
+      }
+
+      const invite = inviteResult.rows[0];
+      if (invite.email.toLowerCase() !== normalizedEmail) {
+        return res.status(400).json({ success: false, message: 'This invite is for a different email address.' });
+      }
+    }
+
+    const existing = await pool.query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [normalizedEmail]);
     if (existing.rows.length > 0) {
       return res.status(409).json({ success: false, message: 'Email already registered' });
     }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
       `INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email, created_at`,
-      [name, email, hashedPassword]
+      [name, normalizedEmail, hashedPassword]
     );
     const user = result.rows[0];
-    
-    // Process any pending invites
-    await processPendingInvites(user.id, email);
-    
+
+    if (inviteToken) {
+      try {
+        const inviteResult = await pool.query(
+          `SELECT id, group_id FROM pending_invites 
+           WHERE invite_token = $1 AND LOWER(email) = LOWER($2) AND status = 'pending'`,
+          [inviteToken, normalizedEmail]
+        );
+
+        if (inviteResult.rows.length > 0) {
+          const invite = inviteResult.rows[0];
+
+          await pool.query(
+            `INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)
+             ON CONFLICT DO NOTHING`,
+            [invite.group_id, user.id]
+          );
+
+          await pool.query(
+            `UPDATE pending_invites SET status = 'accepted', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+            [invite.id]
+          );
+
+          logger.info(`User ${user.id} added to group ${invite.group_id} via invite token`);
+        }
+      } catch (inviteErr) {
+        logger.error('Error processing invite token', { error: inviteErr.message });
+        return res.status(500).json({ success: false, message: 'Could not apply your invitation.' });
+      }
+    } else {
+      await processPendingInvites(user.id, normalizedEmail);
+    }
+
     const accessToken = signAccessToken(user);
     const refreshToken = generateRefreshToken();
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);

@@ -25,12 +25,15 @@ router.post('/logout', logout);
 router.get('/user-by-email', protect, getUserByEmail);
 
 // Google OAuth routes
-router.get('/google',
-  passport.authenticate('google', {
+router.get('/google', (req, res, next) => {
+  const inviteToken = req.query.invite || req.query.state || undefined;
+  const auth = passport.authenticate('google', {
     scope: ['profile', 'email'],
     session: false,
-  })
-);
+    state: inviteToken,
+  });
+  return auth(req, res, next);
+});
 
 router.get('/google/callback',
   passport.authenticate('google', { session: false }),
@@ -42,6 +45,41 @@ router.get('/google/callback',
       }
 
       const user = req.user;
+      const inviteToken = req.query.state || req.query.invite;
+      
+      // If user is new and has an invite token, process it
+      if (inviteToken) {
+        try {
+          const inviteResult = await pool.query(
+            `SELECT id, group_id FROM pending_invites 
+             WHERE invite_token = $1 AND LOWER(email) = LOWER($2) AND status = 'pending'`,
+            [inviteToken, user.email]
+          );
+          
+          if (inviteResult.rows.length > 0) {
+            const invite = inviteResult.rows[0];
+            
+            // Add user to the group
+            await pool.query(
+              `INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)
+               ON CONFLICT DO NOTHING`,
+              [invite.group_id, user.id]
+            );
+            
+            // Mark invite as accepted
+            await pool.query(
+              `UPDATE pending_invites SET status = 'accepted', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+              [invite.id]
+            );
+            
+            logger.info(`User ${user.id} added to group ${invite.group_id} via OAuth invite token`);
+          }
+        } catch (inviteErr) {
+          logger.error('Error processing OAuth invite token', { error: inviteErr.message });
+          // Don't fail login if invite processing fails
+        }
+      }
+      
       const accessToken = signAccessToken(user);
       const refreshToken = generateRefreshToken();
       const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);

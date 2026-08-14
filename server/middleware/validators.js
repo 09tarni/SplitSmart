@@ -57,8 +57,25 @@ const createGroupValidator = [
 
 const addMemberValidator = [
   body('user_id')
-    .notEmpty().withMessage('user_id is required')
+    .optional()
     .isInt({ min: 1 }).withMessage('user_id must be a positive integer'),
+  body('email')
+    .optional()
+    .trim()
+    .isEmail().withMessage('Must be a valid email address'),
+  (req, res, next) => {
+    const hasUserId = req.body.user_id !== undefined && req.body.user_id !== null && req.body.user_id !== '';
+    const hasEmail = req.body.email !== undefined && req.body.email !== null && String(req.body.email).trim() !== '';
+
+    if (!hasUserId && !hasEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'Either user_id or email is required',
+      });
+    }
+
+    next();
+  },
   validate,
 ];
 

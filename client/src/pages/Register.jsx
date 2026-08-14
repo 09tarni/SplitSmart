@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import Logo from '../components/Logo';
@@ -17,13 +17,16 @@ const GOOGLE_SVG = (
 
 export default function Register() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get('invite') || '';
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault(); setLoading(true);
     try {
-      const { data } = await axios.post(`${BASE_URL}/api/auth/register`, form, { headers: { 'Content-Type': 'application/json' }, withCredentials: true });
+      const payload = { ...form, inviteToken };
+      const { data } = await axios.post(`${BASE_URL}/api/auth/register`, payload, { headers: { 'Content-Type': 'application/json' }, withCredentials: true });
       localStorage.setItem('token', data.token); localStorage.setItem('user', JSON.stringify(data.user));
       navigate('/dashboard');
     } catch (err) { toast.error(err.response?.data?.message || 'Registration failed'); }
@@ -61,7 +64,12 @@ export default function Register() {
           <h1 className="text-3xl font-bold mb-1" style={{ color: '#1a1a1a' }}>Create account</h1>
           <p className="text-sm mb-8" style={{ color: '#6b7280' }}>Start splitting expenses with your group</p>
 
-          <button onClick={() => { window.location.href = `${BASE_URL}/api/auth/google`; }}
+          <button onClick={() => {
+            const googleUrl = inviteToken
+              ? `${BASE_URL}/api/auth/google?invite=${encodeURIComponent(inviteToken)}`
+              : `${BASE_URL}/api/auth/google`;
+            window.location.href = googleUrl;
+          }}
             className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 rounded-xl py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors mb-5 shadow-sm">
             {GOOGLE_SVG} Continue with Google
           </button>

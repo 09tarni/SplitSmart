@@ -123,8 +123,22 @@ export default function GroupDetail() {
 
   const handleAddMember = async (e) => {
     e.preventDefault();
-    try { const { data } = await api.get(`/auth/user-by-email?email=${memberEmail}`); await api.post(`/groups/${id}/members`, { user_id: data.data.id }); toast.success('Member added!'); setShowMemberModal(false); setMemberEmail(''); fetchAll(); }
-    catch { toast.error('User not found or already a member'); }
+    const email = memberEmail.trim();
+
+    if (!email) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
+    try {
+      const { data } = await api.post(`/groups/${id}/members`, { email });
+      toast.success(data.message || 'Member added');
+      setShowMemberModal(false);
+      setMemberEmail('');
+      fetchAll();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add member');
+    }
   };
 
   const handleUpdateName = async (e) => {
