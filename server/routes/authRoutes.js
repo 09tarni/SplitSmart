@@ -90,10 +90,14 @@ router.get('/google/callback',
         [user.id, refreshToken, expiresAt]
       );
 
+      // Cross-site (Vercel frontend <-> Render API) needs SameSite=None + Secure
+      // so the cookie is sent on the later /api/auth/refresh XHR; Strict locally.
+      const isProd = process.env.NODE_ENV === 'production';
       res.cookie('refreshToken', refreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        secure: isProd,
+        sameSite: isProd ? 'none' : 'lax',
+        path: '/',
         maxAge: REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
       });
 

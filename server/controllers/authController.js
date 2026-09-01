@@ -13,11 +13,20 @@ const signAccessToken = (user) =>
 const generateRefreshToken = () => crypto.randomBytes(64).toString('hex');
 const omitPassword = ({ password, ...user }) => user;
 
+// In production the frontend (e.g. Vercel) and API (e.g. Render) are on
+// different domains, so the refresh cookie must be SameSite=None + Secure to be
+// sent on cross-site requests. Locally we keep SameSite=Strict over plain HTTP.
+const isProd = process.env.NODE_ENV === 'production';
+const refreshCookieOptions = {
+  httpOnly: true,
+  secure: isProd,
+  sameSite: isProd ? 'none' : 'strict',
+  path: '/',
+};
+
 const setRefreshCookie = (res, token) => {
   res.cookie('refreshToken', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    ...refreshCookieOptions,
     maxAge: REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
   });
 };
@@ -187,7 +196,7 @@ const refresh = async (req, res) => {
       [token]
     );
     if (result.rows.length === 0) {
-      res.clearCookie('refreshToken');
+      res.clearCookie('refreshToken', refreshCookieOptions);
       return res.status(401).json({ success: false, message: 'Invalid or expired refresh token' });
     }
     const row = result.rows[0];
@@ -212,7 +221,7 @@ const logout = async (req, res) => {
   try {
     const token = req.cookies?.refreshToken;
     if (token) await pool.query('DELETE FROM refresh_tokens WHERE token = $1', [token]);
-    res.clearCookie('refreshToken');
+    res.clearCookie('refreshToken', refreshCookieOptions);
     res.json({ success: true, message: 'Logged out' });
   } catch (err) {
     logger.error('logout error', { error: err.message });
