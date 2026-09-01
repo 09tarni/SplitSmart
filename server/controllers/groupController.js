@@ -4,6 +4,10 @@ const { sendInviteEmail } = require('../utils/emailService');
 const crypto = require('crypto');
 
 const buildInviteLink = (inviteToken) => {
+  if (!inviteToken) {
+    throw new Error('buildInviteLink called without an invite token');
+  }
+
   // FRONTEND_URL / CLIENT_URL may be a comma-separated list (localhost + LAN IP +
   // deploy domains). The first entry is the canonical public URL for links.
   const frontendUrl = (process.env.FRONTEND_URL || process.env.CLIENT_URL || '')
@@ -160,7 +164,7 @@ const addMember = async (req, res) => {
       const inviteToken = crypto.randomBytes(32).toString('hex');
 
       const existingInvite = await pool.query(
-        `SELECT id, status FROM pending_invites WHERE group_id = $1 AND LOWER(email) = LOWER($2)`,
+        `SELECT id, status, invite_token FROM pending_invites WHERE group_id = $1 AND LOWER(email) = LOWER($2)`,
         [groupId, emailLower]
       );
 

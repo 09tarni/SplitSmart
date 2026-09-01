@@ -39,4 +39,17 @@ describe('buildInviteLink', () => {
 
     expect(buildInviteLink('abc123')).toBe('https://app.example.com/register?invite=abc123');
   });
+
+  test('uses the first entry of a comma-separated FRONTEND_URL and trims a trailing slash', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.FRONTEND_URL = 'https://app.example.com/ , http://localhost:3000';
+
+    expect(buildInviteLink('abc123')).toBe('https://app.example.com/register?invite=abc123');
+  });
+
+  test('throws when the invite token is missing (never emits invite=undefined)', () => {
+    process.env.FRONTEND_URL = 'https://app.example.com';
+
+    expect(() => buildInviteLink(undefined)).toThrow('without an invite token');
+  });
 });
