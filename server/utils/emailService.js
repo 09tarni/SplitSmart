@@ -8,6 +8,10 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASSWORD,
   },
+  // Force IPv4. Many hosts (e.g. Render's free tier) have no IPv6 outbound
+  // route, so resolving smtp.gmail.com to its AAAA record fails with
+  // ENETUNREACH. `family: 4` makes Node use the A record instead.
+  family: 4,
   // Gmail's TLS handshake + auth + send routinely takes 4-8s from a cold
   // connection, so give the socket room before nodemailer gives up.
   connectionTimeout: 20000,
