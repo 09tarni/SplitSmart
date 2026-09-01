@@ -15,18 +15,40 @@ const logger = require('./logger');
 const app = express();
 const server = http.createServer(app);
 
+if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL && !process.env.CLIENT_URL) {
+  logger.warn('FRONTEND_URL/CLIENT_URL not set in production — invite links will be broken');
+}
+
 // Trust the first proxy (Render/Vercel sit behind a reverse proxy).
 // Without this, express-rate-limit sees every request as the same IP.
 app.set('trust proxy', 1);
 
+// CLIENT_URL / FRONTEND_URL may hold a comma-separated list so localhost and a
+// LAN IP (for phone testing) or multiple deploy domains can all be allowed.
+const allowedOrigins = [
+  ...(process.env.CLIENT_URL || '').split(','),
+  ...(process.env.FRONTEND_URL || '').split(','),
+]
+  .map((o) => o.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
+if (allowedOrigins.length === 0) allowedOrigins.push('http://localhost:3000');
+
+const corsOrigin = (origin, callback) => {
+  // Allow non-browser clients (curl, mobile apps) that send no Origin header.
+  if (!origin || allowedOrigins.includes(origin.replace(/\/+$/, ''))) {
+    return callback(null, true);
+  }
+  callback(new Error(`Origin ${origin} not allowed by CORS`));
+};
+
 const io = new Server(server, {
-  cors: { origin: process.env.CLIENT_URL || 'http://localhost:3000', methods: ['GET', 'POST'] },
+  cors: { origin: allowedOrigins, methods: ['GET', 'POST'] },
 });
 app.set('io', io);
 
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: corsOrigin,
   credentials: true,
 }));
 app.use(cookieParser());

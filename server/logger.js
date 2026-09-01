@@ -7,10 +7,11 @@ const devFormat = combine(
   colorize(),
   timestamp({ format: 'HH:mm:ss' }),
   errors({ stack: true }),
-  printf(({ level, message, timestamp, stack }) => {
+  printf(({ level, message, timestamp, stack, ...meta }) => {
+    const rest = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
     return stack
-      ? `${timestamp} ${level}: ${message}\n${stack}`
-      : `${timestamp} ${level}: ${message}`;
+      ? `${timestamp} ${level}: ${message}\n${stack}${rest}`
+      : `${timestamp} ${level}: ${message}${rest}`;
   })
 );
 

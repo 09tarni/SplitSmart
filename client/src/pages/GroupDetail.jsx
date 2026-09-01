@@ -135,7 +135,38 @@ export default function GroupDetail() {
 
     try {
       const { data } = await api.post(`/groups/${id}/members`, { email });
-      toast.success(data.message || 'Invitation sent');
+
+      if (data.emailSent === false && data.inviteLink) {
+        toast.custom((t) => (
+          <div className="max-w-md rounded-xl border border-amber-200 bg-white p-3 shadow-lg">
+            <p className="text-sm font-medium text-gray-900">{data.message}</p>
+            <div className="mt-2 flex items-center gap-2">
+              <a
+                href={data.inviteLink}
+                target="_blank"
+                rel="noreferrer"
+                className="truncate text-sm text-[#009B4D] underline"
+              >
+                {data.inviteLink}
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(data.inviteLink);
+                  toast.success('Link copied');
+                  toast.dismiss(t.id);
+                }}
+                className="rounded-lg bg-[#009B4D] px-2 py-1 text-xs font-semibold text-white"
+              >
+                Copy Link
+              </button>
+            </div>
+          </div>
+        ), { duration: 8000 });
+      } else {
+        toast.success(data.message || 'Invitation sent');
+      }
+
       setShowMemberModal(false);
       setMemberEmail('');
       // Don't call fetchAll() — socket event 'member_added' will trigger it

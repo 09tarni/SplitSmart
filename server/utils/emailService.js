@@ -8,6 +8,11 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASSWORD,
   },
+  // Gmail's TLS handshake + auth + send routinely takes 4-8s from a cold
+  // connection, so give the socket room before nodemailer gives up.
+  connectionTimeout: 20000,
+  greetingTimeout: 20000,
+  socketTimeout: 25000,
 });
 
 const verifyTransporter = async () => {
@@ -116,7 +121,7 @@ const sendInviteEmail = async (recipientEmail, groupName, inviterName, inviteLin
     console.log('[EMAIL] Calling SMTP sendMail...');
     let info;
     try {
-      info = await sendMailWithTimeout(transporter, mailOptions, 10000);
+      info = await sendMailWithTimeout(transporter, mailOptions, 25000);
     } catch (timeoutErr) {
       if (timeoutErr.message.includes('timed out')) {
         console.log('[EMAIL] SMTP TIMEOUT');
@@ -137,10 +142,9 @@ const sendInviteEmail = async (recipientEmail, groupName, inviterName, inviteLin
       error: err.message,
       to: recipientEmail,
     });
-    return {
-      success: false,
-      error: err.message,
-    };
+    // Re-throw so callers (addMember) can detect the failure and fall back to
+    // returning the invite link instead of falsely reporting success.
+    throw err instanceof Error ? err : new Error(err.message || 'Failed to send invite email');
   }
 };
 

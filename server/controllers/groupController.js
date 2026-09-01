@@ -3,6 +3,27 @@ const logger = require('../logger');
 const { sendInviteEmail } = require('../utils/emailService');
 const crypto = require('crypto');
 
+const buildInviteLink = (inviteToken) => {
+  // FRONTEND_URL / CLIENT_URL may be a comma-separated list (localhost + LAN IP +
+  // deploy domains). The first entry is the canonical public URL for links.
+  const frontendUrl = (process.env.FRONTEND_URL || process.env.CLIENT_URL || '')
+    .split(',')[0]
+    .trim()
+    .replace(/\/+$/, '');
+
+  if (process.env.NODE_ENV === 'production' && !frontendUrl) {
+    throw new Error('FRONTEND_URL/CLIENT_URL is required in production so invite links are valid');
+  }
+
+  if (/localhost|127\.0\.0\.1/.test(frontendUrl)) {
+    logger.warn(
+      `Invite link points at ${frontendUrl || 'http://localhost:3000'} — this will not open on other devices (e.g. phones). Set FRONTEND_URL to a LAN IP or public URL.`
+    );
+  }
+
+  return `${frontendUrl || 'http://localhost:3000'}/register?invite=${inviteToken}`;
+};
+
 const createGroup = async (req, res) => {
   try {
     const { name, description } = req.body;
@@ -145,24 +166,32 @@ const addMember = async (req, res) => {
 
       if (existingInvite.rows.length > 0 && existingInvite.rows[0].status === 'pending') {
         // Resend to existing pending invite
-        const frontendUrl = process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000';
-        const inviteLink = `${frontendUrl}/register?invite=${existingInvite.rows[0].invite_token}`;
-        
+        if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL && !process.env.CLIENT_URL) {
+          logger.error('FRONTEND_URL/CLIENT_URL not set in production — invite links will be broken');
+        }
+
+        const inviteLink = buildInviteLink(existingInvite.rows[0].invite_token);
+        let emailSent = true;
+
         try {
           console.log(`[EMAIL] Starting invite email to: ${emailLower}`);
           await sendInviteEmail(emailLower, groupName, req.user.name, inviteLink);
           console.log(`[EMAIL] Invite email sent to: ${emailLower}`);
         } catch (emailErr) {
+          emailSent = false;
           console.log(`[EMAIL] Invite email FAILED to: ${emailLower}`);
           logger.error(`Email delivery failed for ${emailLower}`, { error: emailErr.message });
         }
-        // Note: Even if email fails, existing pending invite already exists in DB
 
         return res.json({
           success: true,
-          message: `Invitation sent to ${emailLower}`,
+          message: emailSent
+            ? `Invitation sent to ${emailLower}`
+            : `Invite created, but the email couldn't be sent. Share this link manually: ${inviteLink}`,
           isNew: false,
           inviteStatus: 'pending',
+          emailSent,
+          inviteLink,
         });
       }
 
@@ -177,8 +206,12 @@ const addMember = async (req, res) => {
         [groupId, emailLower, req.user.id, inviteToken]
       );
 
-      const frontendUrl = process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000';
-      const inviteLink = `${frontendUrl}/register?invite=${inviteToken}`;
+      if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL && !process.env.CLIENT_URL) {
+        logger.error('FRONTEND_URL/CLIENT_URL not set in production — invite links will be broken');
+      }
+
+      const inviteLink = buildInviteLink(inviteToken);
+      let emailSent = true;
 
       // Send email and wait for it to complete (with timeout safeguard)
       try {
@@ -187,17 +220,21 @@ const addMember = async (req, res) => {
         console.log(`[EMAIL] Invite email sent to: ${emailLower}`);
         logger.info(`Invite email sent to ${emailLower} for group ${groupId}`);
       } catch (emailErr) {
+        emailSent = false;
         console.log(`[EMAIL] Invite email FAILED to: ${emailLower}`);
         logger.error(`Email delivery failed for ${emailLower}`, { error: emailErr.message });
       }
 
-      // Return success once pending invite is created in DB (email delivery is best-effort with timeout)
       logger.info(`Pending invite created for ${emailLower} to group ${groupId}`);
       return res.json({
         success: true,
-        message: `Invitation sent to ${emailLower}`,
+        message: emailSent
+          ? `Invitation sent to ${emailLower}`
+          : `Invite created, but the email couldn't be sent. Share this link manually: ${inviteLink}`,
         isNew: true,
         inviteStatus: 'pending',
+        emailSent,
+        inviteLink,
       });
     } catch (inviteErr) {
       logger.error('Error creating pending invite', { error: inviteErr.message });
@@ -334,4 +371,4 @@ const deleteGroup = async (req, res) => {
   }
 };
 
-module.exports = { createGroup, getMyGroups, getGroupById, addMember, updateGroup, leaveGroup, deleteGroup };
+module.exports = { createGroup, getMyGroups, getGroupById, addMember, updateGroup, leaveGroup, deleteGroup, buildInviteLink };
