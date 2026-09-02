@@ -1,6 +1,5 @@
 const pool = require('../db');
 const logger = require('../logger');
-const { sendInviteEmail } = require('../utils/emailService');
 const crypto = require('crypto');
 
 const buildInviteLink = (inviteToken) => {
@@ -124,10 +123,12 @@ const addMember = async (req, res) => {
     }
 
     const userResult = await pool.query(
-      `SELECT id FROM users WHERE LOWER(email) = $1`,
+      `SELECT id, name FROM users WHERE LOWER(email) = $1`,
       [emailLower]
     );
 
+    // CASE 1 — the email belongs to an existing SplitSmart user: add them
+    // directly and notify them in-app. No email is sent.
     if (userResult.rows.length > 0) {
       const existingUser = userResult.rows[0];
       const memberCheck = await pool.query(
@@ -143,24 +144,38 @@ const addMember = async (req, res) => {
         [groupId, existingUser.id]
       );
 
-      const userNameResult = await pool.query(`SELECT name FROM users WHERE id = $1`, [existingUser.id]);
-      const userName = userNameResult.rows[0]?.name || 'Someone';
+      const groupNameResult = await pool.query(`SELECT name FROM groups WHERE id = $1`, [groupId]);
+      const groupName = groupNameResult.rows[0]?.name || 'a group';
+      const addedUserName = existingUser.name || 'Someone';
 
       const io = req.app.get('io');
       if (io) {
+        // Existing behaviour: tell everyone viewing the group that a member joined.
         io.to(`group:${groupId}`).emit('member_added', {
           groupId,
-          message: `${userName} joined the group`
+          message: `${addedUserName} joined the group`,
+        });
+        // Notify the added user directly (same socket/room mechanism, keyed by
+        // user id). Carries a link so the client can open the group.
+        io.to(`user:${existingUser.id}`).emit('group_invite', {
+          groupId: Number(groupId),
+          groupName,
+          message: `${req.user.name} added you to "${groupName}"`,
+          link: `/groups/${groupId}`,
         });
       }
 
-      logger.info(`Member ${existingUser.id} added to group ${groupId} via email`);
-      return res.json({ success: true, message: 'Member added', isNew: false });
+      logger.info(`Member ${existingUser.id} added to group ${groupId} via email (existing user)`);
+      return res.json({
+        success: true,
+        addedDirectly: true,
+        message: `${addedUserName} was added to the group`,
+      });
     }
 
+    // CASE 2 — no account for this email yet: create/refresh a pending invite
+    // and hand the link back so the inviter can share it manually. No email.
     try {
-      const groupResult = await pool.query(`SELECT name FROM groups WHERE id = $1`, [groupId]);
-      const groupName = groupResult.rows[0]?.name || 'a group';
       const inviteToken = crypto.randomBytes(32).toString('hex');
 
       const existingInvite = await pool.query(
@@ -169,37 +184,17 @@ const addMember = async (req, res) => {
       );
 
       if (existingInvite.rows.length > 0 && existingInvite.rows[0].status === 'pending') {
-        // Resend to existing pending invite
-        if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL && !process.env.CLIENT_URL) {
-          logger.error('FRONTEND_URL/CLIENT_URL not set in production — invite links will be broken');
-        }
-
+        // Reuse the still-pending invite's existing token.
         const inviteLink = buildInviteLink(existingInvite.rows[0].invite_token);
-        let emailSent = true;
-
-        try {
-          console.log(`[EMAIL] Starting invite email to: ${emailLower}`);
-          await sendInviteEmail(emailLower, groupName, req.user.name, inviteLink);
-          console.log(`[EMAIL] Invite email sent to: ${emailLower}`);
-        } catch (emailErr) {
-          emailSent = false;
-          console.log(`[EMAIL] Invite email FAILED to: ${emailLower}`);
-          logger.error(`Email delivery failed for ${emailLower}`, { error: emailErr.message });
-        }
-
+        logger.info(`Existing pending invite returned for ${emailLower} to group ${groupId}`);
         return res.json({
           success: true,
-          message: emailSent
-            ? `Invitation sent to ${emailLower}`
-            : `Invite created, but the email couldn't be sent. Share this link manually: ${inviteLink}`,
           isNew: false,
           inviteStatus: 'pending',
-          emailSent,
           inviteLink,
         });
       }
 
-      // Create pending invite in database
       await pool.query(
         `INSERT INTO pending_invites (group_id, email, invited_by, invite_token, status)
          VALUES ($1, $2, $3, $4, 'pending')
@@ -210,34 +205,12 @@ const addMember = async (req, res) => {
         [groupId, emailLower, req.user.id, inviteToken]
       );
 
-      if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL && !process.env.CLIENT_URL) {
-        logger.error('FRONTEND_URL/CLIENT_URL not set in production — invite links will be broken');
-      }
-
       const inviteLink = buildInviteLink(inviteToken);
-      let emailSent = true;
-
-      // Send email and wait for it to complete (with timeout safeguard)
-      try {
-        console.log(`[EMAIL] Starting invite email to: ${emailLower}`);
-        await sendInviteEmail(emailLower, groupName, req.user.name, inviteLink);
-        console.log(`[EMAIL] Invite email sent to: ${emailLower}`);
-        logger.info(`Invite email sent to ${emailLower} for group ${groupId}`);
-      } catch (emailErr) {
-        emailSent = false;
-        console.log(`[EMAIL] Invite email FAILED to: ${emailLower}`);
-        logger.error(`Email delivery failed for ${emailLower}`, { error: emailErr.message });
-      }
-
       logger.info(`Pending invite created for ${emailLower} to group ${groupId}`);
       return res.json({
         success: true,
-        message: emailSent
-          ? `Invitation sent to ${emailLower}`
-          : `Invite created, but the email couldn't be sent. Share this link manually: ${inviteLink}`,
         isNew: true,
         inviteStatus: 'pending',
-        emailSent,
         inviteLink,
       });
     } catch (inviteErr) {

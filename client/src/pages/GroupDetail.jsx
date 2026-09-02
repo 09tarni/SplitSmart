@@ -136,10 +136,13 @@ export default function GroupDetail() {
     try {
       const { data } = await api.post(`/groups/${id}/members`, { email });
 
-      if (data.emailSent === false && data.inviteLink) {
+      if (data.inviteLink) {
+        // CASE 2 — email has no account yet: show the shareable invite link.
         toast.custom((t) => (
           <div className="max-w-md rounded-xl border border-amber-200 bg-white p-3 shadow-lg">
-            <p className="text-sm font-medium text-gray-900">{data.message}</p>
+            <p className="text-sm font-medium text-gray-900">
+              {email} isn't on SplitSmart yet. Share this invite link with them:
+            </p>
             <div className="mt-2 flex items-center gap-2">
               <a
                 href={data.inviteLink}
@@ -164,7 +167,8 @@ export default function GroupDetail() {
           </div>
         ), { duration: 8000 });
       } else {
-        toast.success(data.message || 'Invitation sent');
+        // CASE 1 — existing user added directly.
+        toast.success(data.message || 'Member added');
       }
 
       setShowMemberModal(false);

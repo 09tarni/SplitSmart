@@ -11,16 +11,42 @@ export default function Navbar() {
   const [showPanel, setShowPanel] = useState(false);
 
   useEffect(() => {
-    const handleExpense = (data) => setNotifications(prev => [{ id: Date.now(), message: data.message, type: 'expense', time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) }, ...prev].slice(0, 20));
-    const handleSettlement = (data) => setNotifications(prev => [{ id: Date.now(), message: data.message, type: 'settlement', time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) }, ...prev].slice(0, 20));
-    const handleMember = (data) => setNotifications(prev => [{ id: Date.now(), message: data.message, type: 'member', time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) }, ...prev].slice(0, 20));
+    // Ensure the socket is live even on pages that don't manage it themselves
+    // (e.g. the dashboard), so user-targeted notifications still arrive.
+    socket.connect();
+
+    const push = (message, type, extra = {}) => setNotifications(prev => [{
+      id: Date.now(),
+      message,
+      type,
+      time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      ...extra,
+    }, ...prev].slice(0, 20));
+
+    const handleExpense = (data) => push(data.message, 'expense');
+    const handleSettlement = (data) => push(data.message, 'settlement');
+    const handleMember = (data) => push(data.message, 'member');
+    const handleGroupInvite = (data) => push(data.message, 'invite', { link: data.link });
+
     socket.on('expense_added', handleExpense);
     socket.on('settlement_made', handleSettlement);
     socket.on('member_added', handleMember);
-    return () => { socket.off('expense_added', handleExpense); socket.off('settlement_made', handleSettlement); socket.off('member_added', handleMember); };
+    socket.on('group_invite', handleGroupInvite);
+    return () => {
+      socket.off('expense_added', handleExpense);
+      socket.off('settlement_made', handleSettlement);
+      socket.off('member_added', handleMember);
+      socket.off('group_invite', handleGroupInvite);
+    };
   }, []);
 
-  const TYPE_ICONS = { expense: '💸', settlement: '✅', member: '👤' };
+  const TYPE_ICONS = { expense: '💸', settlement: '✅', member: '👤', invite: '📩' };
+
+  const openNotification = (n) => {
+    if (!n.link) return;
+    setShowPanel(false);
+    navigate(n.link);
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 bg-white border-b-2 border-[#009B4D]">
@@ -58,12 +84,18 @@ export default function Navbar() {
                       <p className="text-sm">No notifications yet</p>
                     </div>
                   ) : notifications.map(n => (
-                    <div key={n.id} className="px-4 py-3 border-b border-gray-50 hover:bg-[#F5F0E8] transition-colors">
+                    <div
+                      key={n.id}
+                      onClick={() => openNotification(n)}
+                      className={`px-4 py-3 border-b border-gray-50 transition-colors ${n.link ? 'cursor-pointer hover:bg-[#F5F0E8]' : 'hover:bg-[#F5F0E8]'}`}
+                    >
                       <div className="flex items-start gap-3">
                         <span className="text-base mt-0.5">{TYPE_ICONS[n.type]}</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-[#1a1a1a] leading-snug">{n.message}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{n.time}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {n.time}{n.link ? ' · Tap to open' : ''}
+                          </p>
                         </div>
                       </div>
                     </div>
